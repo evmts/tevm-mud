@@ -34,7 +34,7 @@ jobs:
           registry-url: https://registry.npmjs.org
 
       - name: Ensure npm supports provenance
-        run: npm install --global npm@latest
+        run: npm install --global npm@11
 
       - run: pnpm install --frozen-lockfile
 
