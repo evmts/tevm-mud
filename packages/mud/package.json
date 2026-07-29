@@ -1,6 +1,6 @@
 {
 	"name": "@tevm/mud",
-	"version": "1.0.0-rc.151",
+	"version": "1.0.0",
 	"description": "MUD plugin for optimistic updates with Tevm",
 	"keywords": [
 		"solidity",
