@@ -1,0 +1,88 @@
+---
+title: Tevm & the split repos
+description: How @tevm/mud relates to Tevm core, MUD, and the other extracted repositories
+---
+
+# Tevm & the split repos
+
+## Where this repo sits
+
+`@tevm/mud` lives in [`evmts/tevm-mud`](https://github.com/evmts/tevm-mud), a
+standalone repository extracted from
+[`evmts/tevm-monorepo`](https://github.com/evmts/tevm-monorepo) with its Git
+history intact.
+
+The reason for the split is cadence. Tevm core releases on its own schedule;
+`@tevm/mud` needs to follow **MUD's** release schedule, because it depends on MUD
+internals (`@latticexyz/stash/internal`, `@latticexyz/store-sync/internal`, the
+Store field-layout encoding) that move with MUD's minors. Keeping the integration
+in the monorepo meant either holding Tevm releases for MUD or shipping a MUD
+integration built against a stale MUD. Separate repos, separate release trains.
+
+## The dependency direction
+
+```
+@latticexyz/*  ──┐
+                 ├──▶  @tevm/mud  ──▶  your MUD client
+tevm (core)    ──┘
+```
+
+`@tevm/mud` depends on Tevm; Tevm knows nothing about MUD. Concretely it uses:
+
+| Tevm package | For |
+| --- | --- |
+| `@tevm/memory-client` | The in-browser EVM that simulates your system calls |
+| `@tevm/common` | Chain/hardfork config derived from `client.chain` |
+| `@tevm/txpool` | The local pool holding pending optimistic transactions |
+| `@tevm/logger` | Structured logging at the level you pass as `loggingLevel` |
+| `@tevm/utils` | Address and hex helpers |
+
+`tevm` itself is a **peer dependency** (`>=1.0.0`). Your app decides the Tevm
+version; `@tevm/mud` adapts. The handler even supports both the published txpool
+API (whose `on` returns `void`) and the newer release-candidate API (which returns
+an unsubscribe callback), so you are not forced onto a release candidate.
+
+## Which docs to read where
+
+| Site | Covers |
+| --- | --- |
+| [mud.tevm.sh](https://mud.tevm.sh) | This site — the MUD integration |
+| [tevm.sh](https://tevm.sh) | Tevm overall: the bundler, the CLI, the ecosystem |
+| [node.tevm.sh](https://node.tevm.sh) | Tevm Node — the EVM, `MemoryClient`, forking, state, actions |
+| [mud.dev](https://mud.dev) | MUD itself: worlds, systems, tables, Stash, EntryKit |
+
+If a question is about *how the local EVM behaves* — forking, state overrides, gas,
+tracing — it is answered in the Tevm Node docs. If it is about *how optimistic MUD
+state is produced*, it is answered here.
+
+## Versioning and releases
+
+- Releases are managed with [Changesets](https://github.com/changesets/changesets).
+  A merged release PR publishes to npm from GitHub Actions with provenance.
+- The package is on the `1.0.0-rc` line, tracking Tevm's own `1.0.0` release
+  candidates.
+- Breaking changes in MUD internals are treated as breaking for `@tevm/mud`, since
+  they are visible through the Stash and table types you pass in.
+
+## Contributing
+
+```sh
+git clone https://github.com/evmts/tevm-mud
+cd tevm-mud
+nvm use          # Node 24
+corepack enable  # pnpm 9
+pnpm install
+pnpm lint
+pnpm typecheck
+pnpm build
+pnpm test
+```
+
+Docs live in `docs/` and are built with [Vocs](https://vocs.dev):
+
+```sh
+pnpm --filter @tevm/mud-docs dev
+pnpm --filter @tevm/mud-docs build
+```
+
+Add a changeset with `pnpm changeset` for any user-visible change.

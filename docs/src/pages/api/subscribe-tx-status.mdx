@@ -1,0 +1,61 @@
+---
+title: subscribeTxStatus
+description: API reference for subscribeTxStatus
+---
+
+# `subscribeTxStatus`
+
+Curried helper that turns a set of subscribers into a subscribe function. This is
+the primitive behind `handler.subscribeTx`; you rarely need it directly, but it is
+exported for building your own transaction-status plumbing.
+
+```ts
+import { subscribeTxStatus } from '@tevm/mud'
+
+function subscribeTxStatus(
+	subscribers: Set<TxStatusSubscriber>,
+): (subscriber: TxStatusSubscriber) => () => void
+```
+
+## Parameters
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `subscribers` | `Set<TxStatusSubscriber>` | The set the subscriber is added to. Owned by the caller. |
+
+## Returns
+
+A `subscribe` function. Calling it adds the subscriber to the set and returns an
+unsubscribe function that removes it. Neither call throws.
+
+## Example
+
+```ts [txStatus.ts]
+import { subscribeTxStatus, type TxStatus, type TxStatusSubscriber } from '@tevm/mud'
+
+const subscribers = new Set<TxStatusSubscriber>()
+const subscribe = subscribeTxStatus(subscribers)
+
+const unsubscribe = subscribe((status: TxStatus) => {
+	console.log(status.id, status.status)
+})
+
+// Notify manually (the handler does this for you for intercepted writes)
+for (const subscriber of subscribers) {
+	subscriber({ id: '0x12345678', status: 'simulating', timestamp: Date.now() })
+}
+
+unsubscribe()
+```
+
+:::note
+Subscriber exceptions are contained by the handler's internal notifier
+(`notifyTxStatus`), which logs `TxStatus subscriber failed:` and continues to the
+next subscriber. If you notify the set yourself, as above, you own that error
+handling.
+:::
+
+## See also
+
+- [Transaction status guide](/guides/transaction-status)
+- [`TxStatus`](/api/types#txstatus)

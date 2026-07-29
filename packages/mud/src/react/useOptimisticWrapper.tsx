@@ -58,6 +58,33 @@ const getOrCreateHandler = (options: CreateOptimisticHandlerOptions<StoreConfig>
 /**
  * Provider component that initializes the optimistic handler and makes its utilities available
  * to child components via the OptimisticWrapperContext.
+ *
+ * Takes every option of `createOptimisticHandler` plus `children`. When `sync` is provided and not
+ * disabled, and the client has a chain, it also renders MUD's `SyncProvider` with the handler's
+ * `syncAdapter` — do not mount `SyncProvider` yourself in that case.
+ *
+ * Handlers are cached in a registry keyed by `client → storeAddress → stash` and ref-counted, so mounting
+ * the provider twice (StrictMode included) does not create two `writeContract` wrappers or two txpool
+ * subscriptions. `_.cleanup()` runs when the last consumer unmounts.
+ *
+ * @throws {Error} `'Client must be connected to a chain'` (from `createOptimisticHandler`) if
+ * `client.chain` is undefined. Guard on the client being ready before mounting.
+ * @example
+ * ```tsx
+ * import { OptimisticWrapperProvider } from '@tevm/mud/react'
+ * import mudConfig from '../mud.config'
+ *
+ * <OptimisticWrapperProvider
+ *   client={sessionClient}
+ *   storeAddress={worldAddress}
+ *   stash={stash}
+ *   config={mudConfig}
+ *   sync={{ enabled: true, startBlock: 0n }}
+ * >
+ *   <Game />
+ * </OptimisticWrapperProvider>
+ * ```
+ * @see https://mud.tevm.sh/api/react#optimisticwrapperprovider
  */
 export const OptimisticWrapperProvider: React.FC<OptimisticWrapperProviderProps<StoreConfig>> = ({
 	children,
@@ -102,6 +129,21 @@ export const OptimisticWrapperProvider: React.FC<OptimisticWrapperProviderProps<
 
 /**
  * Custom hook to access the optimistic handler utilities from the OptimisticContext.
+ *
+ * Returns `undefined` when called outside an `OptimisticWrapperProvider` — the return type is
+ * non-optional for ergonomics, so guard before use if the component can render outside the provider.
+ *
+ * @returns The handler returned by `createOptimisticHandler`, or `undefined` outside a provider.
+ * @example
+ * ```tsx
+ * const wrapper = useOptimisticWrapper()
+ *
+ * useEffect(() => {
+ *   if (!wrapper) return
+ *   return wrapper.subscribeTx({ subscriber: (status) => console.log(status.status) })
+ * }, [wrapper])
+ * ```
+ * @see https://mud.tevm.sh/api/react#useoptimisticwrapper
  */
 export const useOptimisticWrapper = <TConfig extends StoreConfig>(): OptimisticWrapperContextType<TConfig> => {
 	const context = useContext(OptimisticWrapperContext) as OptimisticWrapperContextType<TConfig>

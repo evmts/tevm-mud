@@ -1,0 +1,109 @@
+---
+title: How it works
+description: The interception, execution and reconciliation model behind @tevm/mud
+---
+
+# How it works
+
+The whole design fits in one sentence: **run the transaction locally on a real EVM
+forked from your chain, decode the MUD Store events it emits, and layer them over
+the Stash until the canonical write arrives.**
+
+## The pieces
+
+### Two Tevm clients
+
+`createOptimisticHandler` creates two `MemoryClient`s, both forked from your
+client's transport at `blockTag: 'latest'`, both sharing a `common` derived from
+`client.chain`:
+
+- **`optimisticClient`** — owns the txpool that intercepted writes are added to.
+  Its `getStorageAt` interceptor answers from the *finished* optimistic overlay.
+- **`internalClient`** — used while replaying the pool. Its `getStorageAt`
+  interceptor answers from the overlay *built so far*, so transaction N sees the
+  effects of transactions 1..N-1.
+
+Both are exposed on `handler._` for debugging. They are internal API and may
+change.
+
+### The storage interceptor
+
+`mudStoreGetStorageAtOverride` wraps the fork transport's `request`. For
+`eth_getStorageAt` calls targeting your Store address it does not hit the network:
+it reads the current (optimistic or internal) MUD `State` and encodes the answer
+back into the Store's storage layout — field layouts, static data slots, dynamic
+lengths and slices. Every other RPC method passes straight through.
+
+This is what makes the simulation see optimistic state: Solidity reads
+`StoreCore` storage, and that storage is served from your Stash overlay.
+
+### The write interceptor
+
+`mudStoreWriteRequestOverride` replaces `writeContract` on the session client. On
+each call it:
+
+1. Generates a 4-byte `txIdentifier` and appends it as `dataSuffix` to both the
+   real transaction and the local one — this is the link used later for
+   reconciliation.
+2. Fires the real `writeContract` immediately (the network is never delayed by
+   the simulation).
+3. In parallel, calls `tevmCall` with `addToMempool: true`, `blockTag: 'pending'`,
+   `skipBalance: true` — the transaction lands in the optimistic client's txpool.
+4. Emits `TxStatus` events as the simulation and then the real receipt progress.
+
+:::warning
+Only EntryKit-style session clients (`client.type === 'bundlerClient'` with a
+`writeContract` method) are intercepted today. Plain wallet clients fall through
+uninstrumented — see [Troubleshooting](/guides/troubleshooting#nothing-optimistic-shows-up).
+:::
+
+### The overlay
+
+The overlay is a list of `PendingStashUpdate`s, never a mutation of your Stash.
+Reads build a throwaway stash whose state is `structuredClone(stash.get().records)`
+with the pending updates applied, so canonical state stays pristine and the
+overlay can be recomputed or dropped at any time.
+
+## The loop
+
+```
+writeContract
+  └─ real tx broadcast ─────────────────────────────┐
+  └─ tevmCall(addToMempool) → txpool 'txadded'      │
+        └─ recompute overlay:                       │
+             deepCopy VM, run pool txs in order,    │
+             decode Store events → overlay,         │
+             notify optimistic subscribers          │
+                                                    │
+canonical sync (syncAdapter)                        │
+  └─ storage adapter writes canonical records ──────┘
+  └─ match tx by 4-byte identifier → evict optimistic tx
+  └─ txpool 'txremoved' / stash change → recompute overlay
+        └─ pool empty ⇒ drop overlay, notify with canonical values
+```
+
+Recomputes are serialized by a small **state update coordinator** so an optimistic
+recompute and a canonical batch never interleave.
+
+## Why not diff-based optimistic updates?
+
+The obvious alternative is to write a JavaScript reducer per system that predicts
+the state change. It fails on three fronts that this design gets for free:
+
+- **Cross-table reads.** `move()` may read `Terrain`, `Health` and `Config` before
+  deciding what to write. Your reducer has to reimplement that; the EVM already
+  does it.
+- **Drift.** The Solidity changes and the reducer does not. Here the prediction is
+  the compiled system itself, read live from chain state.
+- **Ordering.** Two queued moves compound. Replaying the pool in order handles
+  that; ad-hoc reducers usually do not.
+
+## Known trade-offs
+
+- The fork storage cache for the Store address is cleared before each simulated
+  transaction so reads go through the interceptor. That costs redundant RPC work
+  and is tracked as a TODO in the source.
+- Two `MemoryClient`s exist because they need different `getStorageAt` behaviour.
+  Consolidating them is a known follow-up.
+- Clients are not fully disposable: `_.cleanup()` unsubscribes everything, but the
+  underlying `MemoryClient`s are released only when garbage collected.

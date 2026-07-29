@@ -8,3 +8,7 @@ dist
 types
 *.log
 *.tsbuildinfo
+
+# vocs
+docs/dist
+docs/.vocs

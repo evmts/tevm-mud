@@ -1,0 +1,143 @@
+---
+title: React hooks
+description: API reference for the @tevm/mud/react entry point
+---
+
+# React API
+
+```ts
+import {
+	OptimisticWrapperProvider,
+	useOptimisticWrapper,
+	useOptimisticState,
+	useOptimisticRecord,
+	useOptimisticRecords,
+} from '@tevm/mud/react'
+```
+
+## `OptimisticWrapperProvider`
+
+Creates (or reuses) an optimistic handler and provides it to descendants. When
+`sync` is set and not disabled, it also renders `SyncProvider` from
+`@latticexyz/store-sync/react` with the handler's `syncAdapter`.
+
+### Props
+
+All of [`CreateOptimisticHandlerOptions`](/api/create-optimistic-handler#parameters),
+plus:
+
+| Prop | Type | Description |
+| --- | --- | --- |
+| `children` | `ReactNode` | Subtree that can use the hooks. |
+
+Handlers are cached in a registry keyed by `client → storeAddress → stash` and
+ref-counted. Mounting the provider twice with the same triple reuses one handler;
+`_.cleanup()` runs when the last mount unmounts.
+
+```tsx [App.tsx]
+import { OptimisticWrapperProvider } from '@tevm/mud/react'
+import mudConfig from '../mud.config'
+import { stash } from './stash'
+import { client } from './client'
+import { Game } from './Game'
+
+export function App() {
+	return (
+		<OptimisticWrapperProvider
+			client={client}
+			storeAddress="0x5FbDB2315678afecb367f032d93F642f64180aa3"
+			stash={stash}
+			config={mudConfig}
+			sync={{ enabled: true, startBlock: 0n }}
+		>
+			<Game />
+		</OptimisticWrapperProvider>
+	)
+}
+```
+
+## `useOptimisticWrapper`
+
+```ts
+function useOptimisticWrapper<TConfig extends StoreConfig>(): CreateOptimisticHandlerResult<TConfig>
+```
+
+Returns the handler from context. **Returns `undefined` outside a provider** — the
+return type is not optional for ergonomic reasons, so guard before use if the
+component can render outside the provider.
+
+```tsx
+const wrapper = useOptimisticWrapper()
+useEffect(() => {
+	if (!wrapper) return
+	return wrapper.subscribeTx({ subscriber: console.log })
+}, [wrapper])
+```
+
+## `useOptimisticState`
+
+```ts
+function useOptimisticState<TConfig extends StoreConfig, T>(
+	selector: (state: State<TConfig>) => T,
+	opts?: { isEqual?: (a: T, b: T) => boolean },
+): T | undefined
+```
+
+`useSyncExternalStore` over the merged optimistic + canonical state. Returns
+`undefined` when there is no provider above.
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `selector` | `(state) => T` | — | Picks a slice out of state. |
+| `opts.isEqual` | `(a: T, b: T) => boolean` | `deepEqual` | Equality used to suppress re-renders. **Must be a stable reference.** |
+
+```tsx
+import { getRecords } from '@latticexyz/stash/internal'
+import { useOptimisticState } from '@tevm/mud/react'
+import mudConfig from '../mud.config'
+
+const count = useOptimisticState(
+	(state) => Object.keys(getRecords({ state, table: mudConfig.tables.app__Position })).length,
+)
+```
+
+## `useOptimisticRecord`
+
+```ts
+function useOptimisticRecord<TTable extends Table, TDefaultValue>(
+	args: Omit<GetRecordArgs<TTable, TDefaultValue>, 'stash' | 'state'>,
+): UseOptimisticRecordResult<TTable, TDefaultValue>
+```
+
+Optimistic `getRecord`. With `defaultValue`, returns `TableRecord<TTable>`;
+without it, `TableRecord<TTable> | undefined`. Falls back to a plain Stash read
+outside a provider.
+
+```tsx
+const position = useOptimisticRecord({
+	table: mudConfig.tables.app__Position,
+	key: { player: '0x0000000000000000000000000000000000000001' },
+	defaultValue: { x: 0, y: 0 },
+})
+```
+
+## `useOptimisticRecords`
+
+```ts
+function useOptimisticRecords<TTable extends Table>(
+	args: Omit<GetRecordsArgs<TTable>, 'stash' | 'state'>,
+): readonly TableRecord<TTable>[]
+```
+
+Optimistic `getRecords`, returned as an array (`Object.values` of the record map)
+and deep-compared between updates. Returns `[]` rather than `undefined` when there
+is nothing to show.
+
+```tsx
+const players = useOptimisticRecords({ table: mudConfig.tables.app__Position })
+```
+
+## See also
+
+- [React guide](/guides/react)
+- [`createOptimisticHandler`](/api/create-optimistic-handler)

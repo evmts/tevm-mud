@@ -1,0 +1,211 @@
+---
+title: React
+description: Use OptimisticWrapperProvider and the optimistic hooks in a MUD React client
+---
+
+# React
+
+`@tevm/mud/react` is the ergonomic path: one provider, then hooks that mirror the
+Stash read APIs but return optimistic values.
+
+## Provider
+
+`OptimisticWrapperProvider` takes exactly the options of
+[`createOptimisticHandler`](/api/create-optimistic-handler) plus `children`. When
+`sync.enabled` is not `false` and the client has a chain, it also renders MUD's
+`SyncProvider` with the handler's `syncAdapter`, so you do **not** mount
+`SyncProvider` yourself.
+
+```tsx [App.tsx]
+import { OptimisticWrapperProvider } from '@tevm/mud/react'
+import { useSessionClient } from '@latticexyz/entrykit/internal'
+import mudConfig from '../mud.config'
+import { stash } from './stash'
+import { Game } from './Game'
+
+const worldAddress = '0x5FbDB2315678afecb367f032d93F642f64180aa3' as const
+
+export function App() {
+	const { data: sessionClient } = useSessionClient()
+
+	if (!sessionClient) return <p>Connecting…</p>
+
+	return (
+		<OptimisticWrapperProvider
+			client={sessionClient}
+			storeAddress={worldAddress}
+			stash={stash}
+			config={mudConfig}
+			sync={{ enabled: true, startBlock: 0n }}
+		>
+			<Game />
+		</OptimisticWrapperProvider>
+	)
+}
+```
+
+```ts [stash.ts]
+import { createStash } from '@latticexyz/stash/internal'
+import mudConfig from '../mud.config'
+
+export const stash = createStash(mudConfig)
+```
+
+The provider deduplicates handlers per `(client, storeAddress, stash)` triple and
+ref-counts them, so mounting it twice (React 18 StrictMode double-mount included)
+does not create two `writeContract` wrappers or two txpool subscriptions. The
+handler is cleaned up when the last consumer unmounts.
+
+## Reading one record
+
+```tsx [PlayerPosition.tsx]
+import { useOptimisticRecord } from '@tevm/mud/react'
+import { useSessionClient } from '@latticexyz/entrykit/internal'
+import mudConfig from '../mud.config'
+
+export function PlayerPosition() {
+	const { data: sessionClient } = useSessionClient()
+	const position = useOptimisticRecord({
+		table: mudConfig.tables.app__Position,
+		key: { player: sessionClient?.userAddress ?? '0x0000000000000000000000000000000000000000' },
+		defaultValue: { x: 0, y: 0 },
+	})
+
+	return (
+		<p>
+			({position.x}, {position.y})
+		</p>
+	)
+}
+```
+
+With `defaultValue` the return type is `TableRecord<table>`; without it, it is
+`TableRecord<table> | undefined`.
+
+## Reading many records
+
+```tsx [Players.tsx]
+import { useOptimisticRecords } from '@tevm/mud/react'
+import mudConfig from '../mud.config'
+
+export function Players() {
+	const players = useOptimisticRecords({ table: mudConfig.tables.app__Position })
+
+	return (
+		<ul>
+			{players.map((player) => (
+				<li key={player.player}>
+					{player.player}: ({player.x}, {player.y})
+				</li>
+			))}
+		</ul>
+	)
+}
+```
+
+`useOptimisticRecords` compares results with a deep equality check, so a sync
+round that produces identical records does not re-render.
+
+## Arbitrary selections
+
+`useOptimisticState` is the primitive the other hooks are built on — a
+`useSyncExternalStore` over the merged optimistic + canonical state.
+
+```tsx [PlayerCount.tsx]
+import { useOptimisticState } from '@tevm/mud/react'
+import { getRecords } from '@latticexyz/stash/internal'
+import mudConfig from '../mud.config'
+
+export function PlayerCount() {
+	const count = useOptimisticState((state) =>
+		Object.keys(getRecords({ state, table: mudConfig.tables.app__Position })).length,
+	)
+
+	return <p>{count ?? 0} players</p>
+}
+```
+
+:::warning
+The `selector` — and the optional `isEqual` — must be stable. Defining the
+selector inline is fine (it is called on each render anyway), but returning a
+fresh object identity from it with the default `deepEqual` comparator is what you
+want; passing an inline `isEqual` that closes over changing values will re-render
+forever.
+:::
+
+## Escaping to the handler
+
+`useOptimisticWrapper` returns the full
+[`CreateOptimisticHandlerResult`](/api/create-optimistic-handler#returns) — use it
+for `subscribeTx`, or for the `_` internals when debugging.
+
+```tsx [TxToasts.tsx]
+import { useEffect, useState } from 'react'
+import { useOptimisticWrapper } from '@tevm/mud/react'
+import type { TxStatus } from '@tevm/mud'
+
+export function TxToasts() {
+	const wrapper = useOptimisticWrapper()
+	const [statuses, setStatuses] = useState<Record<string, TxStatus>>({})
+
+	useEffect(() => {
+		if (!wrapper) return
+		return wrapper.subscribeTx({
+			subscriber: (status) => setStatuses((prev) => ({ ...prev, [status.id]: status })),
+		})
+	}, [wrapper])
+
+	return (
+		<ul>
+			{Object.values(statuses).map((status) => (
+				<li key={status.id}>{status.status}</li>
+			))}
+		</ul>
+	)
+}
+```
+
+:::note
+Outside an `OptimisticWrapperProvider`, `useOptimisticWrapper()` returns
+`undefined`, and `useOptimisticRecord` / `useOptimisticRecords` transparently fall
+back to plain Stash reads. That is deliberate: components stay usable in tests and
+in screens rendered before the session client exists.
+:::
+
+## Writing
+
+Writes go through the session client, unchanged:
+
+```tsx [MoveButton.tsx]
+import { useSessionClient } from '@latticexyz/entrykit/internal'
+import IWorldAbi from '../IWorld.abi.json'
+
+const worldAddress = '0x5FbDB2315678afecb367f032d93F642f64180aa3' as const
+
+export function MoveButton() {
+	const { data: sessionClient } = useSessionClient()
+
+	return (
+		<button
+			type="button"
+			disabled={!sessionClient}
+			onClick={() =>
+				sessionClient?.writeContract({
+					address: worldAddress,
+					abi: IWorldAbi,
+					functionName: 'app__move',
+					args: [1, 0],
+					chain: sessionClient.chain,
+					account: sessionClient.account,
+				})
+			}
+		>
+			Move right
+		</button>
+	)
+}
+```
+
+Every component reading through the optimistic hooks re-renders as soon as the
+local simulation finishes — typically within a frame or two, long before the
+transaction is mined.

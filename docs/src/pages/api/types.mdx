@@ -1,0 +1,91 @@
+---
+title: Types
+description: Public types exported by @tevm/mud
+---
+
+# Types
+
+```ts
+import type {
+	CreateOptimisticHandlerOptions,
+	CreateOptimisticHandlerResult,
+	SessionClient,
+	TxStatus,
+	TxStatusSubscriber,
+} from '@tevm/mud'
+```
+
+## `TxStatus`
+
+The event emitted for every intercepted write.
+
+```ts
+type TxStatus = {
+	id: string
+	timestamp: number
+} & (
+	| { status: 'simulating' | 'optimistic' }
+	| { status: 'optimistic' | 'confirmed' | 'reverted'; hash: Hex }
+)
+```
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | `string` | The 4-byte hex identifier appended to the transaction calldata. Stable across the whole lifecycle of one write. |
+| `timestamp` | `number` | `Date.now()` when the event was emitted. |
+| `status` | union | See the table below. |
+| `hash` | `Hex` | Present once the real transaction has been broadcast. Narrow with `'hash' in status`. |
+
+| `status` | Emitted when |
+| --- | --- |
+| `simulating` | The local Tevm run has started. |
+| `optimistic` | The local run succeeded (no `hash` yet), then again once the real transaction is broadcast (with `hash`). |
+| `confirmed` | The receipt returned `status: 'success'`. |
+| `reverted` | The receipt returned reverted; the optimistic transaction is dropped. |
+
+## `TxStatusSubscriber`
+
+```ts
+type TxStatusSubscriber = (status: TxStatus) => void
+```
+
+Exceptions thrown by a subscriber are caught and logged by the handler; other
+subscribers still run.
+
+## `SessionClient`
+
+The client shape `@tevm/mud` can intercept writes on — EntryKit's session client.
+
+```ts
+type SessionClient = BundlerClient<Transport, Chain, SmartAccount, Client> & {
+	readonly userAddress: Address
+	writeContract: (args: WriteContractParameters) => Promise<WriteContractReturnType>
+}
+```
+
+`userAddress` is the user's main account (the one your MUD tables are keyed by),
+which is distinct from the session signer that actually signs. `@tevm/mud` uses
+`userAddress` as the `caller` of the local simulation, so `_msgSender()` in your
+systems matches what will happen on chain.
+
+## `CreateOptimisticHandlerOptions`
+
+See [`createOptimisticHandler` parameters](/api/create-optimistic-handler#parameters).
+
+## `CreateOptimisticHandlerResult`
+
+See [`createOptimisticHandler` returns](/api/create-optimistic-handler#returns).
+
+## React types
+
+From `@tevm/mud/react`:
+
+```ts
+import type { UseOptimisticRecordResult, UseOptimisticRecordsResult } from '@tevm/mud/react'
+
+type UseOptimisticRecordResult<TTable, TDefaultValue> = TDefaultValue extends undefined
+	? TableRecord<TTable> | undefined
+	: TableRecord<TTable>
+
+type UseOptimisticRecordsResult<TTable> = readonly TableRecord<TTable>[]
+```

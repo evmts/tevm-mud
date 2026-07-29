@@ -1,0 +1,111 @@
+---
+title: Troubleshooting
+description: Common failures when wiring @tevm/mud, and how to diagnose them
+---
+
+# Troubleshooting
+
+Start by turning the logger up. Every stage of the pipeline logs at `debug`:
+
+```ts
+const optimistic = createOptimisticHandler({
+	client,
+	storeAddress,
+	stash,
+	config,
+	loggingLevel: 'debug',
+})
+```
+
+You should see, per write: `Intercepted writeContract` → `Simulating MUD tx with
+tevmContract` → `Tx added, updating optimistic state.` → `Processing
+transactions.` → `Finished processing transactions and notified subscribers.`
+
+## `Error: Client must be connected to a chain`
+
+`createOptimisticHandler` throws this synchronously when `client.chain` is
+`undefined`. Tevm needs the chain to build its `common`. Create the client with an
+explicit `chain`, and in React guard on the client being ready before mounting
+`OptimisticWrapperProvider`.
+
+## Nothing optimistic shows up
+
+The most likely cause is that your client is not being intercepted. Write
+interception is applied only when:
+
+```ts
+client.type === 'bundlerClient' && 'writeContract' in client
+```
+
+which today means an EntryKit `SessionClient`. A plain viem wallet client gets a
+working handler — sync, reads, subscriptions — but its writes are never simulated,
+so the overlay stays empty. If you see `Creating optimistic handler` in the debug
+log but never `Intercepted writeContract`, this is your problem.
+
+Second most likely: your write does not go through the same client instance you
+passed to the handler. The interception patches one specific object.
+
+## `useOptimisticRecord` returns canonical values only
+
+`useOptimisticRecord`, `useOptimisticRecords` and `useOptimisticState` fall back to
+plain Stash reads when no `OptimisticWrapperProvider` is above them —
+`useOptimisticWrapper()` returns `undefined` and no error is thrown. Check that
+the component is inside the provider.
+
+## A component re-renders forever
+
+`useOptimisticState` compares with `deepEqual` by default. If you pass a custom
+`isEqual`, it must be a stable reference — define it at module scope, not inline
+in the component body:
+
+```ts
+// Bad: new function identity each render
+useOptimisticState(selector, { isEqual: (a, b) => a.x === b.x })
+
+// Good
+const isEqual = (a: { x: number }, b: { x: number }) => a.x === b.x
+useOptimisticState(selector, { isEqual })
+```
+
+## Two handlers fighting over one client
+
+Creating `createOptimisticHandler` twice for the same client wraps `writeContract`
+twice, so each write is simulated twice and the overlay double-applies. The React
+provider guards against this with a ref-counted registry keyed by
+`(client, storeAddress, stash)`; if you call `createOptimisticHandler` directly,
+create it once at module scope and share it.
+
+## Optimistic state never converges after a revert
+
+Check that canonical sync runs through `optimistic.syncAdapter` and not MUD's
+default adapter. Only the handler's adapter matches canonical transactions to
+optimistic ones and evicts them from the txpool; without it, an optimistic
+transaction can linger in the pool and keep being replayed.
+
+## Simulation errors in the logs
+
+`Errors during tevmContract call.` at `warn` level means the local run failed
+(revert, out of gas, missing state). The real transaction is still broadcast — the
+prediction is simply skipped. Common causes:
+
+- The forked RPC does not serve archive state for `blockTag: 'latest'` reads under
+  load. Use a reliable RPC.
+- Your session account lacks a delegation or permission on the World, so the
+  system reverts locally exactly as it would on chain — in which case the
+  transaction will also revert for real.
+
+## `viem` type errors
+
+`@tevm/mud` pins `viem` to `~2.45.0` because it depends on viem's
+account-abstraction types. Mixed viem versions in one dependency tree produce
+structurally incompatible `Client` types. Deduplicate:
+
+```json [package.json]
+{
+  "pnpm": {
+    "overrides": {
+      "viem": "2.45.3"
+    }
+  }
+}
+```

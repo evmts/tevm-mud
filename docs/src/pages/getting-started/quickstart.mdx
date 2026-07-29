@@ -1,0 +1,187 @@
+---
+title: Quickstart
+description: Wire @tevm/mud into a vanilla MUD client end to end
+---
+
+# Quickstart
+
+This page wires `@tevm/mud` into a plain TypeScript MUD client — no React. If you
+are using React, read this page for the mental model, then jump to the
+[React guide](/guides/react), which does the same thing with one provider.
+
+There are four steps:
+
+1. Create a Stash from your `mud.config.ts`.
+2. Create a viem wallet client connected to your chain.
+3. Create the optimistic handler.
+4. Start syncing with the handler's `syncAdapter` so canonical state lands in the
+   same Stash.
+
+## 1. Your MUD config
+
+Nothing changes here — this is the config your world already ships.
+
+```ts [mud.config.ts]
+import { defineWorld } from '@latticexyz/world'
+
+export default defineWorld({
+	namespace: 'app',
+	tables: {
+		Position: {
+			schema: {
+				player: 'address',
+				x: 'int32',
+				y: 'int32',
+			},
+			key: ['player'],
+		},
+	},
+})
+```
+
+## 2. The client
+
+:::warning
+**Write interception currently requires an EntryKit session client.**
+`@tevm/mud` wraps `writeContract` only when `client.type === 'bundlerClient'` and
+the client exposes `writeContract` — i.e. the [`SessionClient`](/api/types#sessionclient)
+EntryKit hands you. With a plain wallet client you still get the handler, the
+Stash sync and the optimistic read APIs, but writes are not simulated locally, so
+no optimistic updates appear. See [Troubleshooting](/guides/troubleshooting#nothing-optimistic-shows-up).
+:::
+
+```ts [client.ts]
+import { getSessionClient } from '@latticexyz/entrykit/internal'
+import { createPublicClient, http } from 'viem'
+import { redstone } from 'viem/chains'
+
+const publicClient = createPublicClient({
+	chain: redstone,
+	transport: http(),
+})
+
+// EntryKit gives you a bundler-backed session client whose `writeContract`
+// @tevm/mud can wrap. In React this is `useSessionClient()`.
+export const client = await getSessionClient({
+	client: publicClient,
+	userAddress: '0x0000000000000000000000000000000000000001',
+	sessionAddress: '0x0000000000000000000000000000000000000002',
+	sessionSigner: sessionSigner,
+	worldAddress: '0x5FbDB2315678afecb367f032d93F642f64180aa3',
+})
+```
+
+`client.chain` **must** be set. `createOptimisticHandler` throws
+`Error('Client must be connected to a chain')` otherwise, because Tevm derives its
+`common` (hardfork, chain id, EIPs) from it.
+
+## 3. The optimistic handler
+
+```ts [optimistic.ts]
+import { createOptimisticHandler } from '@tevm/mud'
+import { createStash } from '@latticexyz/stash/internal'
+import mudConfig from './mud.config'
+import { client } from './client'
+
+const storeAddress = '0x5FbDB2315678afecb367f032d93F642f64180aa3' as const
+
+export const stash = createStash(mudConfig)
+
+export const optimistic = createOptimisticHandler({
+	client,
+	storeAddress,
+	stash,
+	config: mudConfig,
+	// 'debug' prints every intercepted write, storage read and tx state change
+	loggingLevel: 'warn',
+})
+```
+
+## 4. Sync canonical state
+
+The handler hands you a `syncAdapter`. Use it *instead of* MUD's
+`createSyncAdapter` so canonical logs and optimistic logs are reconciled by the
+same coordinator.
+
+```ts [sync.ts]
+import { client } from './client'
+import { optimistic } from './optimistic'
+
+const sync = await optimistic.syncAdapter({
+	publicClient: client,
+	address: '0x5FbDB2315678afecb367f032d93F642f64180aa3',
+	startBlock: 0n,
+})
+
+sync.storedBlockLogs$.subscribe(({ blockNumber }) => {
+	console.log('synced through block', blockNumber)
+})
+```
+
+## 5. Write, and read optimistically
+
+You write through viem exactly as before. `@tevm/mud` has already wrapped
+`client.writeContract`, so the call is simulated locally and its Store events land
+in the optimistic overlay before the RPC even answers.
+
+```ts [move.ts]
+import IWorldAbi from './IWorld.abi.json'
+import mudConfig from './mud.config'
+import { client } from './client'
+import { optimistic, stash } from './optimistic'
+
+const storeAddress = '0x5FbDB2315678afecb367f032d93F642f64180aa3' as const
+
+// Re-render / re-read whenever optimistic OR canonical state changes
+const unsubscribeState = optimistic.subscribeOptimisticState({
+	subscriber: ({ updates }) => {
+		console.log('state changed', updates)
+		console.log(
+			'position now',
+			optimistic.getOptimisticRecord({
+				table: mudConfig.tables.app__Position,
+				key: { player: client.userAddress },
+			}),
+		)
+	},
+})
+
+// Follow the lifecycle of every write
+const unsubscribeTx = optimistic.subscribeTx({
+	subscriber: (status) => {
+		console.log(status.id, status.status, 'hash' in status ? status.hash : undefined)
+	},
+})
+
+await client.writeContract({
+	address: storeAddress,
+	abi: IWorldAbi,
+	functionName: 'app__move',
+	args: [1, 2],
+	chain: client.chain,
+	account: client.account,
+})
+
+// `player` above is `client.userAddress` — the smart account the session client
+// acts for, not the session signer.
+
+// Later, on teardown:
+unsubscribeState()
+unsubscribeTx()
+await optimistic._.cleanup()
+```
+
+## What just happened
+
+- `writeContract` was intercepted, the call ran on a forked Tevm `MemoryClient`,
+  and the emitted `Store_SetRecord` / `Store_SpliceStaticData` / … events were
+  decoded into Stash updates.
+- Those updates were layered *on top of* your canonical Stash without mutating it.
+- `subscribeTx` reported `simulating` → `optimistic` (with the broadcast hash) →
+  `confirmed` or `reverted`.
+- When the canonical transaction arrived through `syncAdapter`, the matching
+  optimistic transaction was evicted from the pool and the overlay collapsed onto
+  canonical state.
+
+See [How it works](/guides/how-it-works) for the details, and
+[Troubleshooting](/guides/troubleshooting) if a prediction does not show up.

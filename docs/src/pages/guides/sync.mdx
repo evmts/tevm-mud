@@ -1,0 +1,124 @@
+---
+title: Syncing canonical state
+description: How the handler's sync adapter replaces MUD's, and how reconciliation works
+---
+
+# Syncing canonical state
+
+`@tevm/mud` does not replace MUD's sync — it wraps it. The `syncAdapter` on the
+handler is a normal `SyncAdapter` from `@latticexyz/store-sync`, built with
+`createStoreSync`, with two additions:
+
+1. Canonical storage writes are queued through the same **state update
+   coordinator** that queues optimistic recomputes, so the two can never
+   interleave mid-update.
+2. Every synced log's `transactionHash` is checked against the local txpool. If it
+   matches an optimistic transaction (by the 4-byte identifier appended to the
+   calldata), that optimistic transaction is evicted — the canonical write is now
+   the source of truth for it.
+
+## Vanilla
+
+```ts [sync.ts]
+import { createStash } from '@latticexyz/stash/internal'
+import { createOptimisticHandler } from '@tevm/mud'
+import mudConfig from './mud.config'
+import { client } from './client'
+
+const worldAddress = '0x5FbDB2315678afecb367f032d93F642f64180aa3' as const
+
+const stash = createStash(mudConfig)
+const optimistic = createOptimisticHandler({
+	client,
+	storeAddress: worldAddress,
+	stash,
+	config: mudConfig,
+})
+
+const sync = await optimistic.syncAdapter({
+	publicClient: client,
+	address: worldAddress,
+	startBlock: 1_000_000n,
+	// Optional: hydrate from a MUD indexer before streaming from RPC
+	indexerUrl: 'https://indexer.mud.redstonechain.com',
+})
+
+sync.latestBlockNumber$.subscribe((blockNumber) => console.log('head', blockNumber))
+await sync.waitForTransaction('0x…')
+```
+
+`startBlock` should be your world's deploy block. Starting at `0n` on a live chain
+means replaying every block, which is slow; MUD's deploy artifacts record the real
+value.
+
+## React
+
+The provider does this for you. Pass `sync` and it mounts MUD's `SyncProvider`
+with `adapter={handler.syncAdapter}`:
+
+```tsx [App.tsx]
+import { OptimisticWrapperProvider } from '@tevm/mud/react'
+import mudConfig from '../mud.config'
+import { stash } from './stash'
+import { client } from './client'
+import { Game } from './Game'
+
+const worldAddress = '0x5FbDB2315678afecb367f032d93F642f64180aa3' as const
+
+export function App() {
+	return (
+		<OptimisticWrapperProvider
+			client={client}
+			storeAddress={worldAddress}
+			stash={stash}
+			config={mudConfig}
+			sync={{ enabled: true, startBlock: 1_000_000n }}
+		>
+			<Game />
+		</OptimisticWrapperProvider>
+	)
+}
+```
+
+Set `sync={{ enabled: false }}` (or omit `sync` entirely) if you already run your
+own sync into the same Stash — for example a worker-based sync, or MUD's
+`SyncProvider` mounted higher in your tree. In that case make sure it uses
+`optimistic.syncAdapter` as its adapter; using MUD's default adapter means
+canonical updates bypass the coordinator and can race with optimistic recomputes.
+
+## Sync progress
+
+The adapter registers MUD's `SyncProgress` table into your Stash and writes to it
+until the sync reaches `SyncStep.LIVE`, so the standard MUD loading UI works
+unchanged:
+
+```tsx [Loading.tsx]
+import { useOptimisticRecord } from '@tevm/mud/react'
+import { SyncProgress } from '@latticexyz/store-sync/internal'
+
+export function Loading() {
+	const progress = useOptimisticRecord({
+		table: SyncProgress,
+		key: {},
+		defaultValue: { step: 'initialize', percentage: 0, latestBlockNumber: 0n, lastBlockNumberProcessed: 0n, message: '' },
+	})
+
+	if (progress.step === 'live') return null
+	return <p>{progress.message} ({Math.round(progress.percentage)}%)</p>
+}
+```
+
+## Reconciliation, precisely
+
+When the canonical state changes, the handler recomputes the overlay from
+scratch:
+
+- If the txpool is **empty**, the overlay is discarded. Subscribers receive one
+  update per previously-overlaid key, carrying the canonical value — so views
+  converge on the truth rather than sticking on a stale prediction.
+- If the txpool is **not empty**, the remaining pending transactions are re-run in
+  price/nonce order against a deep copy of the VM, and the resulting Store events
+  become the new overlay.
+
+This is why a revert or a reordering never leaves the client in a wedged state:
+there is no incremental undo to get wrong, only a recompute.

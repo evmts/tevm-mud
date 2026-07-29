@@ -1,0 +1,143 @@
+---
+title: createOptimisticHandler
+description: API reference for createOptimisticHandler
+---
+
+# `createOptimisticHandler`
+
+Creates the optimistic handler: installs the storage and write interceptors,
+starts watching the local txpool and your Stash, and returns the optimistic read,
+subscription and sync APIs.
+
+```ts
+import { createOptimisticHandler } from '@tevm/mud'
+
+function createOptimisticHandler<TConfig extends StoreConfig = StoreConfig>(
+	options: CreateOptimisticHandlerOptions<TConfig>,
+): CreateOptimisticHandlerResult<TConfig>
+```
+
+## Parameters
+
+`CreateOptimisticHandlerOptions<TConfig>`
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `client` | `Client \| SessionClient` | — | A viem client **connected to a chain**. Write interception requires an EntryKit-style `SessionClient`. |
+| `storeAddress` | `Address` | — | Address of the MUD `Store` / `World` contract. |
+| `stash` | `Stash<TConfig>` | — | The MUD Stash holding canonical state. |
+| `config` | `TConfig` | `undefined` | Your `mud.config.ts`. Type-level only — it narrows `TConfig` so table types flow through the read APIs. |
+| `sync.enabled` | `boolean` | `true` | Only read by `OptimisticWrapperProvider`, which uses it to decide whether to mount MUD's `SyncProvider`. |
+| `sync.startBlock` | `bigint` | `0n` | Block to start syncing from, when the provider owns sync. |
+| `loggingLevel` | `'trace' \| 'debug' \| 'info' \| 'warn' \| 'error' \| 'fatal'` | `'warn'` | Level for the handler's logger and the underlying Tevm clients. |
+
+## Returns
+
+`CreateOptimisticHandlerResult<TConfig>`
+
+### `getOptimisticState()`
+
+```ts
+getOptimisticState(): State<TConfig>
+```
+
+The canonical Stash state with the optimistic overlay applied. A fresh object each
+call — do not use identity comparison on it.
+
+### `getOptimisticRecord(args)`
+
+```ts
+getOptimisticRecord(args: Omit<GetRecordArgs<TTable, TDefaultValue>, 'stash'>): GetRecordResult<TTable, TDefaultValue>
+```
+
+Same signature as `getRecord` from `@latticexyz/stash`, minus `stash`. If `state`
+is omitted it defaults to the optimistic state; pass an explicit `state` to read a
+snapshot you already have. With a `defaultValue`, the result is non-optional.
+
+### `getOptimisticRecords(args)`
+
+```ts
+getOptimisticRecords(args: Omit<GetRecordsArgs<TTable>, 'stash'>): GetRecordsResult<TTable>
+```
+
+Same as `getRecords`, against the optimistic state.
+
+### `subscribeOptimisticState(args)`
+
+```ts
+subscribeOptimisticState(args: { subscriber: StoreUpdatesSubscriber }): Unsubscribe
+```
+
+Subscribes to **both** canonical Stash updates and optimistic overlay updates. The
+subscriber receives MUD's `StoreUpdates` (`{ type: 'records' | 'config', updates }`).
+Call the returned function to unsubscribe from both.
+
+### `subscribeTx(args)`
+
+```ts
+subscribeTx(args: { subscriber: TxStatusSubscriber }): Unsubscribe
+```
+
+Subscribes to [`TxStatus`](/api/types#txstatus) events for every intercepted
+write. See [Transaction status](/guides/transaction-status).
+
+### `syncAdapter`
+
+```ts
+syncAdapter: SyncAdapter
+```
+
+A `@latticexyz/store-sync` adapter that writes canonical logs into your Stash
+through the same coordinator as optimistic recomputes, and reconciles canonical
+transactions with their optimistic counterparts. See
+[Syncing canonical state](/guides/sync).
+
+### `_`
+
+Internal escape hatch — **not** covered by semver.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `_.optimisticClient` | `MemoryClient` | Tevm client owning the optimistic txpool. |
+| `_.internalClient` | `MemoryClient` | Tevm client used to replay the pool. |
+| `_.optimisticStoreSubscribers` | `StoreSubscribers` | Store-level optimistic subscribers. |
+| `_.optimisticTableSubscribers` | `TableSubscribers` | Table-level optimistic subscribers. |
+| `_.cleanup` | `() => Promise<void>` | Unsubscribes from txpool and Stash. Always await this on teardown. |
+
+## Throws
+
+- `Error('Client must be connected to a chain')` — thrown synchronously when
+  `client.chain` is `undefined`.
+
+## Example
+
+```ts [optimistic.ts]
+import { createStash } from '@latticexyz/stash/internal'
+import { createOptimisticHandler } from '@tevm/mud'
+import mudConfig from './mud.config'
+import { client } from './client'
+
+const stash = createStash(mudConfig)
+
+const optimistic = createOptimisticHandler({
+	client,
+	storeAddress: '0x5FbDB2315678afecb367f032d93F642f64180aa3',
+	stash,
+	config: mudConfig,
+	loggingLevel: 'warn',
+})
+
+const position = optimistic.getOptimisticRecord({
+	table: mudConfig.tables.app__Position,
+	key: { player: '0x0000000000000000000000000000000000000001' },
+	defaultValue: { x: 0, y: 0 },
+})
+
+const unsubscribe = optimistic.subscribeOptimisticState({
+	subscriber: ({ updates }) => console.log(updates),
+})
+
+// teardown
+unsubscribe()
+await optimistic._.cleanup()
+```

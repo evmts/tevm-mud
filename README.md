@@ -50,8 +50,9 @@ React hooks are available from the React subpath:
 import { useOptimisticRecord } from '@tevm/mud/react'
 ```
 
-API documentation is published at [mud.tevm.sh](https://mud.tevm.sh/). General
-Tevm documentation remains at [tevm.sh](https://tevm.sh/).
+Full documentation — guides, runnable examples and API reference — is published at
+[mud.tevm.sh](https://mud.tevm.sh/), and its source lives in [`docs/`](./docs).
+General Tevm documentation remains at [tevm.sh](https://tevm.sh/).
 
 ## Development
 

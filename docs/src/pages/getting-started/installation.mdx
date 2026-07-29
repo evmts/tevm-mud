@@ -1,0 +1,81 @@
+---
+title: Installation
+description: Install @tevm/mud and its peer dependencies
+---
+
+# Installation
+
+## Package
+
+`@tevm/mud` is published to npm as [`@tevm/mud`](https://www.npmjs.com/package/@tevm/mud).
+It is currently on the `1.0.0-rc` line and tracks the MUD release cadence.
+
+:::code-group
+
+```bash [pnpm]
+pnpm add @tevm/mud tevm viem
+```
+
+```bash [npm]
+npm install @tevm/mud tevm viem
+```
+
+```bash [bun]
+bun add @tevm/mud tevm viem
+```
+
+:::
+
+## Peer dependencies
+
+| Peer | Range | Required |
+| --- | --- | --- |
+| `tevm` | `>=1.0.0` | yes |
+| `viem` | `~2.45.0` | yes |
+| `react` | `^18.2.0 \|\| ^19.0.0` | only for `@tevm/mud/react` |
+| `react-dom` | `^18.2.0 \|\| ^19.0.0` | only for `@tevm/mud/react` |
+
+The `viem` range is a tilde range on purpose. `@tevm/mud` reaches into viem's
+account-abstraction types (`BundlerClient`, `SmartAccount`) for [`SessionClient`](/api/types#sessionclient)
+and into Tevm's fork transport, both of which are sensitive to viem minor
+releases. Pin viem in your app if you hit a type mismatch:
+
+```json [package.json]
+{
+  "pnpm": {
+    "overrides": {
+      "viem": "2.45.3"
+    }
+  }
+}
+```
+
+MUD packages (`@latticexyz/stash`, `@latticexyz/store`, `@latticexyz/store-sync`,
+`@latticexyz/protocol-parser`, …) are regular dependencies of `@tevm/mud` — you do
+not need to install them separately, but your app should be on the same MUD
+major (`2.x`) so the `Stash` instance you pass in is the one `@tevm/mud` expects.
+
+For React apps also install the React runtime if your MUD template hasn't:
+
+```bash
+pnpm add react react-dom
+```
+
+## Entry points
+
+| Import | Contents |
+| --- | --- |
+| `@tevm/mud` | `createOptimisticHandler`, `subscribeTxStatus`, and the public types |
+| `@tevm/mud/react` | `OptimisticWrapperProvider`, `useOptimisticWrapper`, `useOptimisticState`, `useOptimisticRecord`, `useOptimisticRecords` |
+
+Both ESM and CJS builds ship, with types for each. The package is
+`sideEffects: false`, so unused entry points tree-shake away.
+
+## Requirements
+
+- A viem `Client` **connected to a chain** — `createOptimisticHandler` throws if
+  `client.chain` is undefined, because Tevm needs the chain config to fork.
+- A deployed MUD `Store` (usually your World) address.
+- A MUD `Stash` created with `createStash(mudConfig)`.
+
+Next: the [Quickstart](/getting-started/quickstart).

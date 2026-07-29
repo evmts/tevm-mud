@@ -1,0 +1,132 @@
+---
+title: Transaction status
+description: Track every write from local simulation to on-chain confirmation
+---
+
+# Transaction status
+
+Each intercepted write gets a stable `id` — a 4-byte identifier appended to the
+calldata as `dataSuffix` — and emits a sequence of [`TxStatus`](/api/types#txstatus)
+events through `subscribeTx`.
+
+## Lifecycle
+
+| `status` | Has `hash`? | Meaning |
+| --- | --- | --- |
+| `simulating` | no | The call is running on the local Tevm fork. |
+| `optimistic` | no | The local run succeeded and its Store events are in the optimistic overlay. |
+| `optimistic` | yes | The real transaction was broadcast; the hash is known. |
+| `confirmed` | yes | The receipt came back with `status: 'success'`. |
+| `reverted` | yes | The receipt came back reverted; the optimistic transaction is dropped from the pool and the overlay rolls back. |
+
+Note that `optimistic` is emitted **twice**: once when the simulation lands, and
+once again with the broadcast hash. Key your UI state on `status.id`, and treat
+each event as the latest state for that id.
+
+## Subscribing
+
+```ts [txStatus.ts]
+import type { TxStatus } from '@tevm/mud'
+import { optimistic } from './optimistic'
+
+const pending = new Map<string, TxStatus>()
+
+const unsubscribe = optimistic.subscribeTx({
+	subscriber: (status) => {
+		if (status.status === 'confirmed' || status.status === 'reverted') {
+			pending.delete(status.id)
+		} else {
+			pending.set(status.id, status)
+		}
+
+		console.log(
+			`[${status.id}] ${status.status}`,
+			'hash' in status ? status.hash : '(local only)',
+			new Date(status.timestamp).toISOString(),
+		)
+	},
+})
+
+// Stop listening
+unsubscribe()
+```
+
+## A pending-transaction indicator in React
+
+```tsx [PendingTxs.tsx]
+import { useEffect, useMemo, useState } from 'react'
+import { useOptimisticWrapper } from '@tevm/mud/react'
+import type { TxStatus } from '@tevm/mud'
+
+export function PendingTxs() {
+	const wrapper = useOptimisticWrapper()
+	const [byId, setById] = useState<Record<string, TxStatus>>({})
+
+	useEffect(() => {
+		if (!wrapper) return
+		return wrapper.subscribeTx({
+			subscriber: (status) =>
+				setById((prev) => ({
+					...prev,
+					[status.id]: status,
+				})),
+		})
+	}, [wrapper])
+
+	const pending = useMemo(
+		() => Object.values(byId).filter((tx) => tx.status === 'simulating' || tx.status === 'optimistic'),
+		[byId],
+	)
+
+	if (pending.length === 0) return null
+
+	return (
+		<div role="status">
+			{pending.length} pending {pending.length === 1 ? 'move' : 'moves'}
+		</div>
+	)
+}
+```
+
+## Handling reverts
+
+A revert on chain is the one case where the player sees state snap back. When a
+receipt reports `reverted`, `@tevm/mud` removes the optimistic transaction from
+the Tevm txpool, which triggers a recomputation of the overlay from the remaining
+pool transactions — the bad write disappears and every subscriber is notified.
+
+Surface it explicitly rather than letting the world silently rewind:
+
+```ts [onRevert.ts]
+import { optimistic } from './optimistic'
+
+optimistic.subscribeTx({
+	subscriber: (status) => {
+		if (status.status === 'reverted') {
+			console.error(`Transaction ${status.hash} reverted; optimistic state rolled back.`)
+		}
+	},
+})
+```
+
+:::note
+A failure during *local* simulation is not a revert event. It is logged at `warn`
+level by the handler's logger (raise `loggingLevel` to `'debug'` to see the
+decoded errors) and simply produces no optimistic update — the real transaction is
+still broadcast.
+:::
+
+## Subscribing without a handler
+
+`subscribeTxStatus` is exported standalone so you can build the same pattern over
+your own subscriber set — it is the primitive `subscribeTx` is built from.
+
+```ts [standalone.ts]
+import { subscribeTxStatus, type TxStatus, type TxStatusSubscriber } from '@tevm/mud'
+
+const subscribers = new Set<TxStatusSubscriber>()
+const subscribe = subscribeTxStatus(subscribers)
+
+const unsubscribe = subscribe((status: TxStatus) => console.log(status.status))
+unsubscribe()
+```

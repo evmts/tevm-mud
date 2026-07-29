@@ -1,0 +1,118 @@
+---
+title: What is @tevm/mud?
+description: Optimistic MUD state powered by a local Tevm EVM running in the browser
+---
+
+import { InstallCommand } from '../components/InstallCommand'
+import { OptimisticPlayground } from '../components/OptimisticPlayground'
+import { TevmSites } from '../components/TevmSites'
+
+<div className="tevm-hero">
+	<span className="tevm-hero-eyebrow">@tevm/mud</span>
+	<h1>
+		Optimistic MUD state on a <span className="tevm-hero-accent">real EVM</span>
+	</h1>
+	<p className="tevm-hero-sub">
+		`@tevm/mud` runs your MUD system calls locally, in the browser, on a real EVM before they
+		are confirmed on chain — and exposes the resulting state through the same MUD Stash APIs
+		your game already uses.
+	</p>
+	<div className="tevm-hero-actions">
+		<InstallCommand />
+		<a className="tevm-button" href="/getting-started/quickstart">
+			Quickstart →
+		</a>
+	</div>
+</div>
+
+It is a MUD plugin, not a fork: your `mud.config.ts`, your systems, your Stash and
+your `SyncProvider` stay exactly as they are.
+
+## The problem
+
+A MUD client writes through `writeContract`, then waits for the transaction to be
+mined and indexed before the Stash reflects the change. That round trip is
+hundreds of milliseconds at best, and seconds on a congested chain. Games feel
+broken at those latencies.
+
+The usual fix is hand-written optimistic updates: for every system call you also
+write a JavaScript function that guesses what the contract would have done. That
+guess drifts from Solidity the moment anyone touches a system, and it cannot see
+the parts of your logic that read other tables.
+
+## The solution
+
+Instead of guessing, execute. `@tevm/mud` intercepts `writeContract`, runs the
+call against a [Tevm](https://tevm.sh) `MemoryClient` forked from your RPC, decodes
+the resulting MUD `Store` events, and applies them to an optimistic overlay on top
+of your Stash. The prediction *is* your Solidity, so it cannot drift.
+
+When the canonical transaction lands, the sync adapter reconciles it and drops the
+optimistic overlay for that transaction.
+
+```ts
+import { createOptimisticHandler } from '@tevm/mud'
+
+const optimistic = createOptimisticHandler({ client, storeAddress, stash, config })
+
+// Reads that include not-yet-confirmed writes
+optimistic.getOptimisticState()
+optimistic.getOptimisticRecord({ table: config.tables.Position, key: { player } })
+```
+
+Or in React:
+
+```tsx
+import { useOptimisticRecord } from '@tevm/mud/react'
+
+const position = useOptimisticRecord({ table: config.tables.Position, key: { player } })
+```
+
+## What you get
+
+<div className="tevm-features">
+	<div className="tevm-feature">
+		<h3>Correct predictions</h3>
+		<p>
+			The optimistic state comes from running your actual system bytecode, including
+			cross-table reads and reverts.
+		</p>
+	</div>
+	<div className="tevm-feature">
+		<h3>Zero per-system code</h3>
+		<p>No optimistic reducer to write or maintain — the prediction *is* your Solidity.</p>
+	</div>
+	<div className="tevm-feature">
+		<h3>Real transaction lifecycle</h3>
+		<p>
+			Subscribe to `simulating → optimistic → confirmed | reverted` for each write.
+		</p>
+	</div>
+	<div className="tevm-feature">
+		<h3>Drop-in Stash reads</h3>
+		<p>
+			`getOptimisticRecord` / `getOptimisticRecords` mirror `@latticexyz/stash`'s `getRecord` /
+			`getRecords`, with React hooks that re-render on optimistic *and* canonical updates.
+		</p>
+	</div>
+</div>
+
+## Try it
+
+Send `increment()` and watch the Stash update optimistically — then reconcile on confirmation,
+or roll back when the canonical transaction reverts:
+
+<OptimisticPlayground />
+
+## Next
+
+- [Installation](/getting-started/installation)
+- [Quickstart](/getting-started/quickstart)
+- [How it works](/guides/how-it-works)
+- [How this repo relates to Tevm](/ecosystem)
+
+## The Tevm family
+
+This site is one of the `*.tevm.sh` docs sites — jump between them:
+
+<TevmSites />
