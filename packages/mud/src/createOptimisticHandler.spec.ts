@@ -2,12 +2,16 @@ import { createTevmTransport } from '@tevm/memory-client'
 import { createClient } from 'viem'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { config } from '../test/config.js'
-import { prepare, sessionClient, stash, testContract } from '../test/prepare.js'
+import { mudTestFixtureAvailable, prepare, sessionClient, stash, testContract } from '../test/prepare.js'
 import { state } from '../test/state.js'
 import { createOptimisticHandler } from './createOptimisticHandler.js'
 import type { TxStatus } from './subscribeTx.js'
 
-describe('createOptimisticHandler', () => {
+// The latest published @tevm/test-utils does not include MUDTestSystem yet.
+// Preserve the integration suite and run it automatically once that fixture is published.
+const describeWithMudFixture = mudTestFixtureAvailable ? describe : describe.skip
+
+describeWithMudFixture('createOptimisticHandler', () => {
 	beforeEach(async () => {
 		await prepare({ count: 10 })
 	})
@@ -66,7 +70,6 @@ describe('createOptimisticHandler', () => {
 		// Add a pending transaction to the optimistic client
 		const newRecord = Object.values(state.records.app.TestTable)[10]!
 		await optimisticClient.tevmContract({
-			// @ts-expect-error - cannot type args
 			...testContract.write.set(...Object.values(newRecord)),
 			addToMempool: true,
 		})
@@ -103,7 +106,6 @@ describe('createOptimisticHandler', () => {
 		const newRecord = Object.values(state.records.app.TestTable)[10]!
 
 		await optimisticClient.tevmContract({
-			// @ts-expect-error - cannot type args
 			...testContract.write.set(...Object.values(newRecord)),
 			addToMempool: true,
 		})
@@ -138,7 +140,6 @@ describe('createOptimisticHandler', () => {
 		const optimisticClient = handler._.optimisticClient
 		const newRecord = Object.values(state.records.app.TestTable)[10]!
 		await optimisticClient.tevmContract({
-			// @ts-expect-error - cannot type args
 			...testContract.write.set(...Object.values(newRecord)),
 			addToMempool: true,
 		})
@@ -166,7 +167,6 @@ describe('createOptimisticHandler', () => {
 		// Add transaction
 		const newRecord = Object.values(state.records.app.TestTable)[10]!
 		await optimisticClient.tevmContract({
-			// @ts-expect-error - cannot type args
 			...testContract.write.set(...Object.values(newRecord)),
 			addToMempool: true,
 		})
@@ -213,13 +213,11 @@ describe('createOptimisticHandler', () => {
 		const tx2Values = { ...newRecord, val1: newRecord.val1 + 200n }
 
 		await optimisticClient.tevmContract({
-			// @ts-expect-error - cannot type args
 			...testContract.write.set(...Object.values(tx1Values)),
 			addToMempool: true,
 		})
 
 		await optimisticClient.tevmContract({
-			// @ts-expect-error - cannot type args
 			...testContract.write.set(...Object.values(tx2Values)),
 			addToMempool: true,
 		})

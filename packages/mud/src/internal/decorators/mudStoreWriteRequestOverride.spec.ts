@@ -24,7 +24,6 @@ describe('mudStoreWriteRequestOverride', () => {
 		expect(txPool.txsInPool).toEqual(0)
 
 		await sessionClient.writeContract({
-			// @ts-expect-error - cannot type args
 			...testContract.write.set(...Object.values(record)),
 			account: PREFUNDED_ACCOUNTS[0].address,
 		})

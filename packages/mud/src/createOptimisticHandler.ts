@@ -299,13 +299,20 @@ export const createOptimisticHandler = <TConfig extends StoreConfig = StoreConfi
 	const _subscribeToOptimisticState = async () => {
 		logger.debug('Subscribing to optimistic state')
 		const txPool = await optimisticClient.transport.tevm.getTxPool()
+		// The latest published TxPool returns void here, while newer Tevm release
+		// candidates return an unsubscribe callback. Support both APIs so this
+		// integration can use published caret ranges without leaking callbacks once
+		// the unsubscribe-capable release becomes latest.
+		const txPoolEvents = txPool as unknown as {
+			on: (event: 'txadded' | 'txremoved', callback: (hash: string) => void) => (() => void) | void
+		}
 
-		const unsubscribeTxAdded = txPool.on('txadded', () => {
+		const unsubscribeTxAdded = txPoolEvents.on('txadded', () => {
 			logger.debug('Tx added, updating optimistic state.')
 			stateUpdateCoordinator.queueOptimisticUpdate(() => processTransactionsAndUpdateLogs())
 		})
 
-		const unsubscribeTxRemoved = txPool.on('txremoved', (hash) => {
+		const unsubscribeTxRemoved = txPoolEvents.on('txremoved', (hash) => {
 			logger.debug('Tx removed, updating optimistic state.')
 			if (!syncedOptimisticHashes.has(hash as Hex))
 				stateUpdateCoordinator.queueOptimisticUpdate(() => processTransactionsAndUpdateLogs())
@@ -327,8 +334,8 @@ export const createOptimisticHandler = <TConfig extends StoreConfig = StoreConfi
 		})
 
 		return () => {
-			unsubscribeTxAdded()
-			unsubscribeTxRemoved()
+			if (typeof unsubscribeTxAdded === 'function') unsubscribeTxAdded()
+			if (typeof unsubscribeTxRemoved === 'function') unsubscribeTxRemoved()
 			unsubscribeStash()
 		}
 	}

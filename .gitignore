@@ -1,0 +1,10 @@
+.DS_Store
+.env
+.env.*
+.pnpm-store
+node_modules
+coverage
+dist
+types
+*.log
+*.tsbuildinfo

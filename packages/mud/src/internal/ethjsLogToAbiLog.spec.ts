@@ -1,4 +1,4 @@
-import { MUDTestSystem } from '@tevm/test-utils'
+import { storeEventsAbi } from '@latticexyz/store'
 import { type EthjsLog, hexToBytes } from '@tevm/utils'
 import { assert, describe, expect, it } from 'vitest'
 import { ethjsLogToAbiLog } from './ethjsLogToAbiLog.js'
@@ -16,7 +16,7 @@ describe('ethjsLogToAbiLog', () => {
 			),
 		] satisfies EthjsLog
 
-		expect(ethjsLogToAbiLog(MUDTestSystem.abi, ethjsLog)).toMatchObject({
+		expect(ethjsLogToAbiLog(storeEventsAbi, ethjsLog)).toMatchObject({
 			eventName: 'Store_SetRecord',
 			address: '0x1234567890123456789012345678901234567890',
 			topics: [
@@ -46,7 +46,7 @@ describe('ethjsLogToAbiLog', () => {
 		] satisfies EthjsLog
 
 		try {
-			ethjsLogToAbiLog(MUDTestSystem.abi, ethjsLog)
+			ethjsLogToAbiLog(storeEventsAbi, ethjsLog)
 		} catch (error) {
 			assert(error instanceof Error)
 			expect(error.message).toContain(

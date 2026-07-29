@@ -1,7 +1,6 @@
 {
 	"name": "@tevm/mud",
 	"version": "1.0.0-rc.151",
-	"private": true,
 	"description": "MUD plugin for optimistic updates with Tevm",
 	"keywords": [
 		"solidity",
@@ -12,8 +11,12 @@
 	],
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/evmts/tevm-monorepo.git",
-		"directory": "bundler-packages/mud"
+		"url": "https://github.com/evmts/tevm-mud.git",
+		"directory": "packages/mud"
+	},
+	"homepage": "https://mud.tevm.sh/",
+	"bugs": {
+		"url": "https://github.com/evmts/tevm-mud/issues"
 	},
 	"license": "MIT",
 	"contributors": [
@@ -55,56 +58,57 @@
 		"src"
 	],
 	"scripts": {
-		"all": "pnpm i  && bun run build && bun run lint && bun run lint:check && bun run format:check && bun run format && bun run test:coverage && bun run generate:docs",
-		"build": "nx run-many --targets=build:dist,build:types --projects=@tevm/mud",
+		"build": "pnpm run build:dist && pnpm run build:types",
 		"build:dist": "tsup",
-		"build:types": "tsup --dts-only && tsc --emitDeclarationOnly --declaration",
+		"build:types": "tsup --dts-only && tsc --project tsconfig.build.json",
 		"clean": "rm -rf node_modules && rm -rf artifacts && rm -rf dist && rm -rf cache",
 		"format": "biome format . --write",
 		"format:check": "biome format .",
 		"generate:docs": "typedoc",
 		"lint": "biome check . --write --unsafe",
 		"lint:check": "biome check . --verbose",
-		"lint:deps": "bunx depcheck --ignores=@testing-library/react,@tevm/config,@tevm/decorators,@tevm/node,@types/react-dom",
-		"lint:package": "bunx publint --strict && attw --pack",
-		"test": "vitest --coverage",
+		"test": "vitest run",
 		"test:coverage": "vitest run --coverage",
 		"test:run": "vitest run",
-		"test:ui": "vitest --ui"
+		"test:ui": "vitest --ui",
+		"typecheck": "tsc --noEmit --declaration false --declarationMap false"
 	},
 	"dependencies": {
-		"@latticexyz/common": "2.2.23",
+		"@latticexyz/common": "^2.2.23",
 		"@latticexyz/config": "^2.2.23",
 		"@latticexyz/protocol-parser": "^2.2.23",
 		"@latticexyz/schema-type": "^2.2.23",
 		"@latticexyz/stash": "^2.2.23",
 		"@latticexyz/store": "^2.2.23",
 		"@latticexyz/store-sync": "^2.2.23",
-		"@tevm/common": "workspace:^",
-		"@tevm/logger": "workspace:^",
-		"@tevm/memory-client": "workspace:^",
-		"@tevm/txpool": "workspace:^",
-		"@tevm/utils": "workspace:^",
+		"@tevm/common": "^1.0.0-next.148",
+		"@tevm/logger": "^1.0.0-next.148",
+		"@tevm/memory-client": "^1.0.0-next.148",
+		"@tevm/txpool": "^1.0.0-next.148",
+		"@tevm/utils": "^1.0.0-next.148",
 		"react": "^19.2.6",
 		"react-dom": "^19.2.6",
-		"viem": "^2.49.3"
+		"viem": "~2.45.0"
 	},
 	"devDependencies": {
 		"@testing-library/react": "^16.3.2",
-		"@tevm/config": "workspace:^",
-		"@tevm/decorators": "workspace:^",
-		"@tevm/node": "workspace:^",
-		"@tevm/test-utils": "workspace:^",
-		"@tevm/tsconfig": "workspace:^",
-		"@tevm/tsupconfig": "workspace:^",
+		"@tevm/config": "^1.0.0-next.148",
+		"@tevm/decorators": "^1.0.0-next.148",
+		"@tevm/node": "^1.0.0-next.148",
+		"@tevm/test-utils": "^1.0.0-next.148",
+		"@tevm/tsconfig": "^1.0.0-next.142",
+		"@tevm/tsupconfig": "^1.0.0-next.148",
 		"@types/react": "^19.2.14",
 		"@types/react-dom": "^19.2.3",
-		"jsdom": "^29.1.1"
+		"jsdom": "^29.1.1",
+		"tevm": "^1.0.0-next.149",
+		"zod": "^4.1.11"
 	},
 	"peerDependencies": {
-		"react": "^18.2.0",
-		"react-dom": "^18.2.0",
-		"viem": "^2.49.3"
+		"react": "^18.2.0 || ^19.0.0",
+		"react-dom": "^18.2.0 || ^19.0.0",
+		"tevm": ">=1.0.0",
+		"viem": "~2.45.0"
 	},
 	"peerDependenciesMeta": {
 		"react": {
@@ -115,6 +119,7 @@
 		}
 	},
 	"publishConfig": {
-		"access": "public"
+		"access": "public",
+		"provenance": true
 	}
 }

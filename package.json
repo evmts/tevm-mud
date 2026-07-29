@@ -1,0 +1,42 @@
+{
+	"name": "@tevm/mud-workspace",
+	"version": "0.0.0",
+	"private": true,
+	"description": "Standalone workspace for the @tevm/mud integration",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/evmts/tevm-mud.git"
+	},
+	"license": "MIT",
+	"type": "module",
+	"scripts": {
+		"build": "pnpm --filter @tevm/mud build",
+		"changeset": "changeset",
+		"format": "biome format . --write",
+		"format:check": "biome format .",
+		"lint": "biome check .",
+		"release": "pnpm build && changeset publish",
+		"test": "pnpm --filter @tevm/mud test",
+		"typecheck": "pnpm --filter @tevm/mud typecheck"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.4.15",
+		"@changesets/changelog-github": "^0.7.0",
+		"@changesets/cli": "^2.31.0",
+		"@tevm/tsconfig": "^1.0.0-next.142",
+		"@vitest/coverage-v8": "^4.1.6",
+		"tsup": "^8.5.1",
+		"typescript": "^6.0.3",
+		"vitest": "^4.1.6"
+	},
+	"packageManager": "pnpm@9.15.9",
+	"engines": {
+		"node": "^24.0.0",
+		"pnpm": "^9.0.0"
+	},
+	"pnpm": {
+		"overrides": {
+			"viem": "2.45.3"
+		}
+	}
+}
