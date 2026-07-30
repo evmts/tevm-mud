@@ -1,5 +1,5 @@
 import type { State, StoreConfig } from '@latticexyz/stash/internal'
-import { useDebugValue, useSyncExternalStore } from 'react'
+import { useCallback, useDebugValue, useMemo, useSyncExternalStore } from 'react'
 import { deepEqual } from '../internal/utils/deepEqual.js'
 import { memoize } from '../internal/utils/memoize.js'
 import { useOptimisticWrapper } from './useOptimisticWrapper.js'
@@ -51,13 +51,19 @@ export const useOptimisticState = <TConfig extends StoreConfig, T>(
 	const { isEqual = deepEqual } = opts
 	const wrapper = useOptimisticWrapper<TConfig>()
 
-	const slice = useSyncExternalStore(
-		(subscriber) => {
+	const subscribe = useCallback(
+		(subscriber: () => void) => {
 			if (!wrapper) return () => {}
 			return wrapper.subscribeOptimisticState({ subscriber })
 		},
-		wrapper ? memoize(() => selector(wrapper.getOptimisticState()), isEqual) : () => undefined,
+		[wrapper],
 	)
+	const getSnapshot = useMemo(
+		() => (wrapper ? memoize(() => selector(wrapper.getOptimisticState()), isEqual) : () => undefined),
+		[isEqual, selector, wrapper],
+	)
+
+	const slice = useSyncExternalStore(subscribe, getSnapshot)
 
 	useDebugValue(slice)
 	return slice

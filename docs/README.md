@@ -1,7 +1,7 @@
 # `@tevm/mud` docs
 
 The documentation site for [`@tevm/mud`](../packages/mud), built with
-[Vocs](https://vocs.dev) 2.7.0 and deployed to <https://mud.tevm.sh>.
+[Vocs](https://vocs.dev) 2.7.2 and deployed to <https://mud.tevm.sh>.
 
 ```sh
 pnpm --filter @tevm/mud-docs dev     # local dev server
@@ -30,5 +30,6 @@ The `mud.tevm.sh` DNS record must point at Vercel per the instructions
 `vercel domains add` prints for the `tevm.sh` zone.
 
 The [Docs workflow](../.github/workflows/docs.yml) builds the site on every PR and
-push that touches `docs/` or `packages/mud/src/`, so a broken build is caught in
-CI regardless of the hosting setup.
+push that touches `docs/` or `packages/mud/src/`. Pushes to `main` deploy the
+prebuilt output to the production Vercel project. The repository needs
+`VERCEL_TOKEN`, `VERCEL_ORG_ID`, and `VERCEL_PROJECT_ID` Actions secrets.

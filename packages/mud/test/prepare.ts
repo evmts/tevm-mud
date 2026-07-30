@@ -3,35 +3,15 @@ import { storeEventsAbi } from '@latticexyz/store'
 import { createStorageAdapter } from '@latticexyz/store-sync/internal'
 import { tevmDefault } from '@tevm/common'
 import { createTevmTransport, tevmContract, tevmDeploy } from '@tevm/memory-client'
-import * as tevmTestUtils from '@tevm/test-utils'
+import { MUDTestSystem } from '@tevm/test-utils'
 import { PREFUNDED_ACCOUNTS } from '@tevm/utils'
-import { type Address, createClient, decodeEventLog, type Log } from 'viem'
+import { createClient, decodeEventLog, type Log } from 'viem'
 import { createBundlerClient } from 'viem/account-abstraction'
 import { writeContract } from 'viem/actions'
 import { config } from './config.js'
 import { state } from './state.js'
 
-const testContractAddress: Address = '0x5FbDB2315678afecb367f032d93F642f64180aa3'
-const MUDTestSystem = (tevmTestUtils as Record<string, unknown>)['MUDTestSystem'] as
-	| {
-			withAddress: (address: Address) => any
-	  }
-	| undefined
-
-/**
- * The latest-tagged @tevm/test-utils package does not yet publish the
- * MUDTestSystem fixture that exists in the Tevm release-candidate line. Keep a
- * typed placeholder so unit tests can load, and make integration tests opt into
- * execution only when the fixture becomes available.
- */
-export const mudTestFixtureAvailable = MUDTestSystem !== undefined
-export const testContract = MUDTestSystem?.withAddress(testContractAddress) ?? {
-	address: testContractAddress,
-	abi: [],
-	bytecode: '0x',
-	read: {},
-	write: {},
-}
+export const testContract = MUDTestSystem.withAddress('0x5FbDB2315678afecb367f032d93F642f64180aa3')
 export const stash = createStash(config)
 
 export const client = createClient({
@@ -54,6 +34,7 @@ export const writeRecords = async (records: TableRecord<typeof config.tables.app
 
 	for (const values of records) {
 		const { logs } = await tevmContract(client, {
+			// @ts-expect-error - Object.values cannot preserve the generated contract argument tuple.
 			...testContract.write.set(...Object.values(values)),
 			addToBlockchain: true,
 		})
@@ -79,12 +60,6 @@ export const writeRecords = async (records: TableRecord<typeof config.tables.app
 }
 
 export const prepare = async ({ count = 10 }: { count?: number } = {}) => {
-	if (!mudTestFixtureAvailable) {
-		throw new Error(
-			'The latest published @tevm/test-utils does not export MUDTestSystem; MUD integration tests are skipped.',
-		)
-	}
-
 	await tevmDeploy(client, {
 		abi: testContract.abi,
 		bytecode: testContract.bytecode,

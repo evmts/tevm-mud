@@ -38,6 +38,18 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Build package
+        run: pnpm build
+
+      - name: Test package
+        run: pnpm test
+
       - uses: changesets/action@v1
         with:
           version: pnpm changeset version

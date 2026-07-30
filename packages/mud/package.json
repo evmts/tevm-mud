@@ -91,30 +91,40 @@
 		"viem": "~2.45.0"
 	},
 	"devDependencies": {
+		"@tanstack/react-query": "^5.101.4",
 		"@testing-library/react": "^16.3.2",
 		"@tevm/config": "^1.0.0-next.148",
 		"@tevm/decorators": "^1.0.0-next.148",
 		"@tevm/node": "^1.0.0-next.148",
-		"@tevm/test-utils": "^1.0.0-next.148",
+		"@tevm/test-utils": "^1.0.0-rc.151",
 		"@tevm/tsconfig": "^1.0.0-next.142",
 		"@tevm/tsupconfig": "^1.0.0-next.148",
 		"@types/react": "^19.2.14",
 		"@types/react-dom": "^19.2.3",
 		"jsdom": "^29.1.1",
 		"tevm": "^1.0.0-next.149",
+		"wagmi": "^2.19.5",
 		"zod": "^4.1.11"
 	},
 	"peerDependencies": {
+		"@tanstack/react-query": "^5.0.0",
 		"react": "^18.2.0 || ^19.0.0",
 		"react-dom": "^18.2.0 || ^19.0.0",
 		"tevm": ">=1.0.0",
-		"viem": "~2.45.0"
+		"viem": "~2.45.0",
+		"wagmi": "^2.0.0"
 	},
 	"peerDependenciesMeta": {
+		"@tanstack/react-query": {
+			"optional": true
+		},
 		"react": {
 			"optional": true
 		},
 		"react-dom": {
+			"optional": true
+		},
+		"wagmi": {
 			"optional": true
 		}
 	},

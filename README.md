@@ -13,13 +13,13 @@ as a peer dependency.
 ## Install
 
 ```sh
-pnpm add @tevm/mud tevm
+pnpm add @tevm/mud tevm viem
 ```
 
 Add React when using the `@tevm/mud/react` entry point:
 
 ```sh
-pnpm add react react-dom
+pnpm add react react-dom wagmi @tanstack/react-query
 ```
 
 The main entry point exports `createOptimisticHandler`, which accepts a connected

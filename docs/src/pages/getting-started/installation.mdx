@@ -8,7 +8,7 @@ description: Install @tevm/mud and its peer dependencies
 ## Package
 
 `@tevm/mud` is published to npm as [`@tevm/mud`](https://www.npmjs.com/package/@tevm/mud).
-It is currently on the `1.0.0-rc` line and tracks the MUD release cadence.
+It uses SemVer, releases independently from Tevm core, and tracks the MUD release cadence.
 
 :::code-group
 
@@ -34,6 +34,8 @@ bun add @tevm/mud tevm viem
 | `viem` | `~2.45.0` | yes |
 | `react` | `^18.2.0 \|\| ^19.0.0` | only for `@tevm/mud/react` |
 | `react-dom` | `^18.2.0 \|\| ^19.0.0` | only for `@tevm/mud/react` |
+| `wagmi` | `^2.0.0` | only for `@tevm/mud/react` |
+| `@tanstack/react-query` | `^5.0.0` | only for `@tevm/mud/react` |
 
 The `viem` range is a tilde range on purpose. `@tevm/mud` reaches into viem's
 account-abstraction types (`BundlerClient`, `SmartAccount`) for [`SessionClient`](/api/types#sessionclient)
@@ -55,10 +57,10 @@ MUD packages (`@latticexyz/stash`, `@latticexyz/store`, `@latticexyz/store-sync`
 not need to install them separately, but your app should be on the same MUD
 major (`2.x`) so the `Stash` instance you pass in is the one `@tevm/mud` expects.
 
-For React apps also install the React runtime if your MUD template hasn't:
+For React apps install the full MUD sync runtime if your MUD template has not:
 
 ```bash
-pnpm add react react-dom
+pnpm add react react-dom wagmi @tanstack/react-query
 ```
 
 ## Entry points

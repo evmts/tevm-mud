@@ -2,12 +2,13 @@ import { createLogger } from '@tevm/logger'
 import { createMemoryClient } from '@tevm/memory-client'
 import { type Address, type EIP1193RequestFn, pad } from 'viem'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { mudTestFixtureAvailable, testContract } from '../../../test/prepare.js'
+import { testContract } from '../../../test/prepare.js'
 import { state } from '../../../test/state.js'
 import { mudStoreGetStorageAtOverride } from './mudStoreGetStorageAtOverride.js'
 
 const getState = () => state
 const client = createMemoryClient()
+const records = Object.values(state.records.app.TestTable).slice(0, 2)
 const mudStoreRequestOverride = mudStoreGetStorageAtOverride(
 	{ request: (async () => {}) as EIP1193RequestFn },
 	'internal',
@@ -17,11 +18,7 @@ const mudStoreRequestOverride = mudStoreGetStorageAtOverride(
 	storeAddress: testContract.address,
 })
 
-// Keep the storage integration test visible but skip it while the latest
-// @tevm/test-utils release lacks the MUDTestSystem deployment fixture.
-const describeWithMudFixture = mudTestFixtureAvailable ? describe : describe.skip
-
-describeWithMudFixture('mudStoreGetStorageAtOverride', () => {
+describe('mudStoreGetStorageAtOverride', () => {
 	beforeEach(async () => {
 		await client.tevmDeploy({
 			abi: testContract.abi,
@@ -29,18 +26,17 @@ describeWithMudFixture('mudStoreGetStorageAtOverride', () => {
 			addToBlockchain: true,
 		})
 
-		for (const values of Object.values(state.records.app.TestTable)) {
+		for (const values of records) {
 			await client.tevmContract({
+				// @ts-expect-error - Object.values cannot preserve the generated contract argument tuple.
 				...testContract.write.set(...Object.values(values)),
 				addToBlockchain: true,
 			})
 		}
 	})
 
-	// TODO: This test is slow due to multiple contract deployments and storage operations
-	// Consider optimizing or running as integration test
-	it.skip('should calculate and return the correct value for any data slot from the client override', async () => {
-		for (const { key1, key2 } of Object.values(state.records.app.TestTable)) {
+	it('should calculate and return the correct value for any data slot from the client override', async () => {
+		for (const { key1, key2 } of records) {
 			const { accessList } = await client.tevmContract({
 				...testContract.read.get(key1, key2),
 				addToBlockchain: true,

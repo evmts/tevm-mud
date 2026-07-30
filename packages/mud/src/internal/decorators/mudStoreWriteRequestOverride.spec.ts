@@ -1,12 +1,28 @@
 import { createLogger } from '@tevm/logger'
 import { createMemoryClient } from '@tevm/memory-client'
 import { PREFUNDED_ACCOUNTS } from '@tevm/utils'
+import type { Client } from 'viem'
 import { describe, expect, it } from 'vitest'
 import { sessionClient, testContract } from '../../../test/prepare.js'
 import { state } from '../../../test/state.js'
 import { mudStoreWriteRequestOverride } from './mudStoreWriteRequestOverride.js'
 
 describe('mudStoreWriteRequestOverride', () => {
+	it('leaves non-bundler clients unchanged', () => {
+		const client = { type: 'publicClient' } as Client
+
+		expect(() =>
+			mudStoreWriteRequestOverride(
+				client,
+				createLogger({ name: '@tevm/mud', level: 'debug' }),
+			)({
+				memoryClient: createMemoryClient(),
+				storeAddress: testContract.address,
+				txStatusSubscribers: new Set(),
+			}),
+		).not.toThrow()
+	})
+
 	// TODO: when eth_getProof is supported on tevm node
 	it.todo('should correctly wrap writeContract calls with a bundler client', async () => {
 		const optimisticClient = createMemoryClient({ fork: { transport: sessionClient } })
@@ -24,6 +40,7 @@ describe('mudStoreWriteRequestOverride', () => {
 		expect(txPool.txsInPool).toEqual(0)
 
 		await sessionClient.writeContract({
+			// @ts-expect-error - Object.values cannot preserve the generated contract argument tuple.
 			...testContract.write.set(...Object.values(record)),
 			account: PREFUNDED_ACCOUNTS[0].address,
 		})

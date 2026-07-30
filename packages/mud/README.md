@@ -10,10 +10,14 @@ canonical transaction is confirmed.
 ## Install
 
 ```sh
-pnpm add @tevm/mud tevm
+pnpm add @tevm/mud tevm viem
 ```
 
-Install React and React DOM when using the `@tevm/mud/react` hooks.
+Install the React and MUD sync peers when using the `@tevm/mud/react` entry point:
+
+```sh
+pnpm add react react-dom wagmi @tanstack/react-query
+```
 
 ```ts
 import { createOptimisticHandler } from '@tevm/mud'
