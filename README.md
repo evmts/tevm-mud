@@ -1,5 +1,7 @@
 # `@tevm/mud`
 
+> **No Longer Maintained:** This repository is archived and no longer maintained because [MUD](https://mud.dev/) is no longer actively maintained. No further updates, bug fixes, or releases are planned.
+
 `@tevm/mud` connects [MUD](https://mud.dev/) applications to
 [Tevm](https://tevm.sh/) so game clients can execute pending writes locally and
 present optimistic MUD state while the transaction is being confirmed.
